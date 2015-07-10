@@ -210,7 +210,7 @@ void MarkShortcutRunAs(const std::wstring& sShortcut)
 #pragma warning(disable:4127)
 	} while (0);
 #pragma warning(pop)
-	
+
 	CoUninitialize();
 }
 
@@ -233,11 +233,13 @@ void InformWindowsOfDriveChange(LPCWSTR MountPoint, bool bAddNotRemove)
 
 	DWORD recipients = BSM_ALLDESKTOPS | BSM_APPLICATIONS;
 	DEV_BROADCAST_VOLUME msg;
-	ZeroMemory(&msg, sizeof(msg));
-	msg.dbcv_size = sizeof(msg);
+	ZeroMemory(&msg, sizeof(DEV_BROADCAST_VOLUME));
+	msg.dbcv_size = sizeof(DEV_BROADCAST_VOLUME);
 	msg.dbcv_devicetype = DBT_DEVTYP_VOLUME;
 	msg.dbcv_unitmask = 1 << (MountPoint[0] - 'A');
+
 	logw(L"unit mask is %d\n", (int)msg.dbcv_unitmask);
+	
 	WPARAM messageType;
 
 	if (bAddNotRemove){
@@ -251,11 +253,19 @@ void InformWindowsOfDriveChange(LPCWSTR MountPoint, bool bAddNotRemove)
 
 	long result = BroadcastSystemMessage(0, &recipients, WM_DEVICECHANGE, messageType, (LPARAM)&msg);
 	if (result <= 0){
-		logw(L"Notify failed with result code %d\n", result);
+		logw(L"Notify failed with error code %d\n", GetLastError());
 	}
 	else{
 		logw(L"Notification done successfully");
 	}
+
+	// If uac is enabled we will get the ACCESS_DENIED
+	// using this options we can send a custom message
+	// and a custom shell extension could notify the explorer about drive change
+	logw(L"Sending now the custom message with sizeof %d", sizeof(DEV_DEVICE_CHANGED));
+	UINT WM_MYMESSAGE = RegisterWindowMessage(L"OnDokanDeviceChangeMessage");
+	BOOL res = ::SendNotifyMessage(HWND_BROADCAST, WM_MYMESSAGE, (WPARAM)bAddNotRemove, (LPARAM)msg.dbcv_unitmask);
+
 }
 
 void BroadcastDeviceChange(WPARAM message, int nDosDriveNo, DWORD driveMap)
@@ -291,7 +301,7 @@ void BroadcastDeviceChange(WPARAM message, int nDosDriveNo, DWORD driveMap)
 		{
 			if (driveMap & (1 << i))
 			{
-				char root[] = { (char) i + 'A', ':', '\\', 0 };
+				char root[] = { (char)i + 'A', ':', '\\', 0 };
 				SHChangeNotify(eventId, SHCNF_PATH, root, NULL);
 
 				// We don't need to support Windows 2000
@@ -312,7 +322,7 @@ void BroadcastDeviceChange(WPARAM message, int nDosDriveNo, DWORD driveMap)
 		}
 	}
 
-	dbv.dbcv_size = sizeof (dbv);
+	dbv.dbcv_size = sizeof(dbv);
 	dbv.dbcv_devicetype = DBT_DEVTYP_VOLUME;
 	dbv.dbcv_reserved = 0;
 	dbv.dbcv_unitmask = driveMap;

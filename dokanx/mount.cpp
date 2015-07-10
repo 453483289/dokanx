@@ -271,7 +271,9 @@ DokanRemoveMountPoint(
     result = DokanMountControl(&control);
     if (result) {
         logw(L"DokanControl recieved DeviceName:%ws\n", control.DeviceName);
-        SendReleaseIRP(control.DeviceName);
+		if (!SendReleaseIRP(control.DeviceName)){
+			logw(L"SendReleaseIRP NOT executed");
+		}
 		if (isImpersonateEnabled){
 			InformWindowsOfDriveChange(MountPoint, false);
 		}

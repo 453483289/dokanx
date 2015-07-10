@@ -80,7 +80,7 @@ int Unmount(LPCWSTR	MountPoint, BOOL ForceUnmount)
     logw(L"Start");
     int status = 0;
     DOKAN_CONTROL control;
-	ULONG Options;
+	ULONG Options = 0;
 
 	DOKAN_CONTROL_INIT(control);
 

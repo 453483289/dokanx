@@ -7,6 +7,12 @@
 #include <ShlObj.h>
 #include <Dbt.h>
 
+struct _DEV_DEVICE_CHANGED : DEV_BROADCAST_VOLUME {
+	BOOL       dbcv_isadd;
+};
+
+typedef struct  _DEV_DEVICE_CHANGED   DEV_DEVICE_CHANGED;
+typedef         DEV_DEVICE_CHANGED    DBTFAR *PDEV_DEVICE_CHANGED;
 
 bool OpenWindowsExplorer(
 	__in const std::wstring& filePath,
