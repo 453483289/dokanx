@@ -121,6 +121,15 @@ DiskDeviceControl(
     dcb = DeviceObject->DeviceExtension;
     outputLength = irpSp->Parameters.DeviceIoControl.OutputBufferLength;
 
+	if (!dcb->Mounted){
+		DDbgPrint("  Device is not mounted");
+		if (dcb->SymbolicLinkName != NULL){
+			DDbgPrint("  Device is not mounted, so delete the device");
+			DokanUnmount(dcb);
+		}
+		return STATUS_DEVICE_DOES_NOT_EXIST;
+	}
+
     switch (irpSp->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_DISK_GET_DRIVE_GEOMETRY:
         {
@@ -266,12 +275,14 @@ DiskDeviceControl(
                Even if status = STATUS_SUCCESS, GetVolumeNameForVolumeMountPoint returns error.
                Something is wrong..
             */
+			RtlZeroMemory(mountdevName, sizeof(MOUNTDEV_NAME));
             mountdevName->NameLength = deviceName->Length;
 
             if (sizeof(USHORT) + mountdevName->NameLength < bufferLength) {
-                RtlCopyMemory((PCHAR)mountdevName->Name,
-                                deviceName->Buffer,
-                                mountdevName->NameLength);
+
+                RtlCopyMemory(mountdevName->Name, deviceName->Buffer,
+                              mountdevName->NameLength);
+
                 Irp->IoStatus.Information = sizeof(USHORT) + mountdevName->NameLength;
                 status = STATUS_SUCCESS;
                 DDbgPrint("  DeviceName %wZ\n", deviceName);
@@ -379,7 +390,7 @@ DiskDeviceControl(
 
     default:
         PrintUnknownDeviceIoctlCode(irpSp->Parameters.DeviceIoControl.IoControlCode);
-        status = STATUS_NOT_IMPLEMENTED;
+		status = STATUS_INVALID_DEVICE_REQUEST;
         break;
     }
     DDbgPrint("   <= DokanDiskDeviceControl");
@@ -421,94 +432,97 @@ Return Value:
         { 0xdca0e0a5, 0xd2ca, 0x4f0f, { 0x84, 0x16, 0xa6, 0x41, 0x46, 0x57, 0xa7, 0x7a } };
 
 
-    __try {
-        FsRtlEnterFileSystem();
+	__try {
 
-        Irp->IoStatus.Information = 0;
+		DDbgPrint("==> DokanDispatchDeviceControl");
 
-        irpSp = IoGetCurrentIrpStackLocation(Irp);
+		FsRtlEnterFileSystem();
 
-        controlCode = irpSp->Parameters.DeviceIoControl.IoControlCode;
-    
-        if (controlCode != IOCTL_EVENT_WAIT &&
-            controlCode != IOCTL_EVENT_INFO &&
-            controlCode != IOCTL_KEEPALIVE) {
+		Irp->IoStatus.Information = 0;
 
-            DDbgPrint("==> DokanDispatchIoControl");
-            DDbgPrint("  ProcessId %lu\n", IoGetRequestorProcessId(Irp));
-        }
+		irpSp = IoGetCurrentIrpStackLocation(Irp);
 
-        vcb = DeviceObject->DeviceExtension;
-        if (GetIdentifierType(vcb) == DGL) {
-            status = GlobalDeviceControl(DeviceObject, Irp);
-            __leave;
-        } else if (GetIdentifierType(vcb) == DCB) {
-            status = DiskDeviceControl(DeviceObject, Irp);
-            __leave;
-        } else if (GetIdentifierType(vcb) != VCB) {
-            status = STATUS_INVALID_PARAMETER;
-            __leave;
-        }
-        dcb = vcb->Dcb;
+		controlCode = irpSp->Parameters.DeviceIoControl.IoControlCode;
 
-        switch (irpSp->Parameters.DeviceIoControl.IoControlCode) {
-        case IOCTL_EVENT_WAIT:
-            //DDbgPrint("  IOCTL_EVENT_WAIT");
-            status = DokanRegisterPendingIrpForEvent(DeviceObject, Irp);
-            break;
+		if (controlCode != IOCTL_EVENT_WAIT &&
+			controlCode != IOCTL_EVENT_INFO &&
+			controlCode != IOCTL_KEEPALIVE) {
 
-        case IOCTL_EVENT_INFO:
-            //DDbgPrint("  IOCTL_EVENT_INFO");
-            status = DokanCompleteIrp(DeviceObject, Irp);
-            break;
+			DDbgPrint("==> DokanDispatchIoControl");
+			DDbgPrint("  ProcessId %lu\n", IoGetRequestorProcessId(Irp));
+		}
+		
+		vcb = DeviceObject->DeviceExtension;
+		if (GetIdentifierType(vcb) == DGL) {
+			status = GlobalDeviceControl(DeviceObject, Irp);
+			__leave;
+		} else if (GetIdentifierType(vcb) == DCB) {
+			status = DiskDeviceControl(DeviceObject, Irp);
+			__leave;
+		} else if (GetIdentifierType(vcb) != VCB) {
+			status = STATUS_INVALID_PARAMETER;
+			__leave;
+		}
+		dcb = vcb->Dcb;
 
-        case IOCTL_EVENT_RELEASE:
-            DDbgPrint("  IOCTL_EVENT_RELEASE");
-            status = DokanEventRelease(DeviceObject);
-            break;
+		switch (irpSp->Parameters.DeviceIoControl.IoControlCode) {
+		case IOCTL_EVENT_WAIT:
+			DDbgPrint("  IOCTL_EVENT_WAIT");
+			status = DokanRegisterPendingIrpForEvent(DeviceObject, Irp);
+			break;
 
-        case IOCTL_EVENT_WRITE:
-            DDbgPrint("  IOCTL_EVENT_WRITE");
-            status = DokanEventWrite(DeviceObject, Irp);
-            break;
+		case IOCTL_EVENT_INFO:
+			DDbgPrint("  IOCTL_EVENT_INFO");
+			status = DokanCompleteIrp(DeviceObject, Irp);
+			break;
 
-        case IOCTL_KEEPALIVE:
-            if (dcb->Mounted) {
-                ExAcquireResourceExclusiveLite(&dcb->Resource, TRUE);
-                DokanUpdateTimeout(&dcb->TickCount, DOKAN_KEEPALIVE_TIMEOUT);
-                ExReleaseResourceLite(&dcb->Resource);
-                status = STATUS_SUCCESS;
-            } else {
-                DDbgPrint(" device is not mounted");
-                status = STATUS_INSUFFICIENT_RESOURCES;
-            }
-            break;
+		case IOCTL_EVENT_RELEASE:
+			DDbgPrint("  IOCTL_EVENT_RELEASE");
+			status = DokanEventRelease(DeviceObject);
+			break;
 
-        case IOCTL_RESET_TIMEOUT:
-            status = DokanResetPendingIrpTimeout(DeviceObject, Irp);
-            break;
+		case IOCTL_EVENT_WRITE:
+			DDbgPrint("  IOCTL_EVENT_WRITE");
+			status = DokanEventWrite(DeviceObject, Irp);
+			break;
 
-        case IOCTL_GET_ACCESS_TOKEN:
-            status = DokanGetAccessToken(DeviceObject, Irp);
-            break;
+		case IOCTL_KEEPALIVE:
+			DDbgPrint("  IOCTL_KEEPALIVE");
+			if (dcb->Mounted) {
+				ExAcquireResourceExclusiveLite(&dcb->Resource, TRUE);
+				DokanUpdateTimeout(&dcb->TickCount, DOKAN_KEEPALIVE_TIMEOUT);
+				ExReleaseResourceLite(&dcb->Resource);
+				status = STATUS_SUCCESS;
+			} else {
+				DDbgPrint(" device is not mounted");
+				status = STATUS_INSUFFICIENT_RESOURCES;
+			}
+			break;
 
-        default:
-            {
-                PrintUnknownDeviceIoctlCode(irpSp->Parameters.DeviceIoControl.IoControlCode);
-                status = STATUS_NOT_IMPLEMENTED;
-            }
-            break;
-        } // switch IoControlCode
-    
-    } __finally {
+		case IOCTL_RESET_TIMEOUT:
+			DDbgPrint("  IOCTL_RESET_TIMEOUT");
+			status = DokanResetPendingIrpTimeout(DeviceObject, Irp);
+			break;
 
-        if (status != STATUS_PENDING) {
-            //
-            // complete the Irp
-            //
-            Irp->IoStatus.Status = status;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        }
+		case IOCTL_GET_ACCESS_TOKEN:
+			DDbgPrint("  IOCTL_GET_ACCESS_TOKEN");
+			status = DokanGetAccessToken(DeviceObject, Irp);
+			break;
+
+		default:
+		{
+			PrintUnknownDeviceIoctlCode(irpSp->Parameters.DeviceIoControl.IoControlCode);
+			status = STATUS_NOT_IMPLEMENTED;
+		}
+		break;
+		} // switch IoControlCode
+
+	} __finally {
+
+	    // read of Irp->IoStatus.Information can cause in case of STATUS_PENDING an BSOD
+		if (status != STATUS_PENDING){
+			DokanCompleteIrpRequest(Irp, status, Irp->IoStatus.Information);
+		}
 
         if (controlCode != IOCTL_EVENT_WAIT &&
             controlCode != IOCTL_EVENT_INFO &&
@@ -519,6 +533,8 @@ Return Value:
         }
 
         FsRtlExitFileSystem();
+
+		DDbgPrint("<== DokanDispatchDeviceControl");
     }
 
     return status;

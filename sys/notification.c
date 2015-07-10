@@ -208,10 +208,8 @@ ReleasePendingIrp(
         listHead = RemoveHeadList(&completeList);
         irpEntry = CONTAINING_RECORD(listHead, IRP_ENTRY, ListEntry);
         irp = irpEntry->Irp;
-        irp->IoStatus.Information = 0;
-        irp->IoStatus.Status = STATUS_SUCCESS;
         DokanFreeIrpEntry(irpEntry);
-        IoCompleteRequest(irp, IO_NO_INCREMENT);
+		DokanCompleteIrpRequest(irp, STATUS_SUCCESS, 0);
     }
 }
 
@@ -258,7 +256,7 @@ NotificationLoop(
     ULONG	bufferLen;
     PVOID	buffer;
 
-    //DDbgPrint("=> NotificationLoop");
+    DDbgPrint("=> NotificationLoop");
 
     InitializeListHead(&completeList);
 
@@ -349,10 +347,10 @@ NotificationLoop(
             irp->IoStatus.Status = STATUS_SUCCESS;
         }
         DokanFreeIrpEntry(irpEntry);
-        IoCompleteRequest(irp, IO_NO_INCREMENT);
+		DokanCompleteIrpRequest(irp, irp->IoStatus.Status, irp->IoStatus.Information);
     }
 
-    //DDbgPrint("<= NotificationLoop");
+    DDbgPrint("<= NotificationLoop");
 }
 
 
@@ -439,21 +437,45 @@ DokanStartEventNotificationThread(
 
 VOID
 DokanStopEventNotificationThread(
-    __in PDokanDCB	Dcb)
+__in PDokanDCB	Dcb)
 {
-    DDbgPrint("==> DokanStopEventNotificationThread");
+	PIO_WORKITEM      workItem;
+	
+	DDbgPrint("==> DokanStopEventNotificationThread");
+
+	workItem = IoAllocateWorkItem(Dcb->DeviceObject);
+	if (workItem == NULL){
+		DDbgPrint("Can't create work item.");
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	IoQueueWorkItem(workItem, DokanStopEventNotificationThreadInternal, DelayedWorkQueue, workItem);
+
+	DDbgPrint("<== DokanStopEventNotificationThread");
+}
+
+VOID
+DokanStopEventNotificationThreadInternal(
+    __in PDEVICE_OBJECT DeviceObject,
+	__in PVOID      Context)
+{
+	PDokanDCB Dcb;
+
+    DDbgPrint("==> DokanStopEventNotificationThreadInternal");
     
+	Dcb = DeviceObject->DeviceExtension;
+
     KeSetEvent(&Dcb->ReleaseEvent, 0, FALSE);
 
     if (Dcb->EventNotificationThread) {
-        KeWaitForSingleObject(
-            Dcb->EventNotificationThread, Executive,
-            KernelMode, FALSE, NULL);
-        ObDereferenceObject(Dcb->EventNotificationThread);
-        Dcb->EventNotificationThread = NULL;
+        KeWaitForSingleObject(Dcb->EventNotificationThread, Executive, KernelMode, FALSE, NULL);
+		if (Dcb->EventNotificationThread){
+			ObDereferenceObject(Dcb->EventNotificationThread);
+			Dcb->EventNotificationThread = NULL;
+		}
     }
     
-    DDbgPrint("<== DokanStopEventNotificationThread");
+    DDbgPrint("<== DokanStopEventNotificationThreadInternal");
 }
 
 
@@ -468,6 +490,8 @@ DokanEventRelease(
     PLIST_ENTRY	fcbEntry, fcbNext, fcbHead;
     PLIST_ENTRY	ccbEntry, ccbNext, ccbHead;
     NTSTATUS	status = STATUS_SUCCESS;
+
+	DDbgPrint("==> DokanEventRelease");
 
     vcb = DeviceObject->DeviceExtension;
     if (GetIdentifierType(vcb) != VCB) {
@@ -505,7 +529,7 @@ DokanEventRelease(
         }
         ExReleaseResourceLite(&fcb->Resource);
     }
-
+	
     ExReleaseResourceLite(&vcb->Resource);
     KeLeaveCriticalRegion();
 
@@ -515,6 +539,8 @@ DokanEventRelease(
     DokanStopEventNotificationThread(dcb);
 
     DokanDeleteDeviceObject(dcb);
+
+	DDbgPrint("<== DokanEventRelease");
 
     return status;
 }

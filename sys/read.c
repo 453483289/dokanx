@@ -59,8 +59,6 @@ Return Value:
 	PEVENT_CONTEXT		eventContext;
 	ULONG				eventLength;
 
-	//PAGED_CODE();
-
 	__try {
 
 		FsRtlEnterFileSystem();
@@ -170,14 +168,7 @@ Return Value:
 	} __finally {
 
 		// if IRP status is not pending, must complete current IRP
-		if (status != STATUS_PENDING) {
-			Irp->IoStatus.Status = status;
-			Irp->IoStatus.Information = readLength;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
-			DokanPrintNTStatus(status);
-		} else {
-			DDbgPrint("  STATUS_PENDING");
-		}
+		DokanCompleteIrpRequest(Irp, status, readLength);
 
 		DDbgPrint("<== DokanRead");
 		
@@ -269,9 +260,7 @@ DokanCompleteRead(
 		DDbgPrint("  status = 0x%X\n", status);
 	}
 
-	irp->IoStatus.Status = status;
-	irp->IoStatus.Information = readLength;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
+	DokanCompleteIrpRequest(irp, status, readLength);
 
 	DDbgPrint("<== DokanCompleteRead");
 }

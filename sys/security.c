@@ -131,13 +131,8 @@ DokanDispatchQuerySecurity(
 
 	} __finally {
 
-		if (status != STATUS_PENDING) {
-			Irp->IoStatus.Status = status;
-			Irp->IoStatus.Information = info;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
-			DokanPrintNTStatus(status);
-		}
-
+		DokanCompleteIrpRequest(Irp, status, info);
+		
 		DDbgPrint("<== DokanQuerySecurity");
 		FsRtlExitFileSystem();
 	}
@@ -204,11 +199,7 @@ DokanCompleteQuerySecurity(
 		DDbgPrint("  ccb == NULL");
 	}
 
-	irp->IoStatus.Status = status;
-	irp->IoStatus.Information = info;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
-
-	DokanPrintNTStatus(status);
+	DokanCompleteIrpRequest(irp, status, info);
 
 	DDbgPrint("<== DokanCompleteQuerySecurity");
 }
@@ -328,13 +319,8 @@ DokanDispatchSetSecurity(
 
 	} __finally {
 
-		if (status != STATUS_PENDING) {
-			Irp->IoStatus.Status = status;
-			Irp->IoStatus.Information = info;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
-			DokanPrintNTStatus(status);
-		}
-
+		DokanCompleteIrpRequest(Irp, status, info);
+		
 		DDbgPrint("<== DokanSetSecurity");
 		FsRtlExitFileSystem();
 	}
@@ -372,11 +358,7 @@ DokanCompleteSetSecurity(
 
 	status = EventInfo->Status;
 
-	irp->IoStatus.Status = status;
-	irp->IoStatus.Information = 0;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
-
-	DokanPrintNTStatus(status);
+	DokanCompleteIrpRequest(irp, status, 0);
 
 	DDbgPrint("<== DokanCompleteSetSecurity");
 }

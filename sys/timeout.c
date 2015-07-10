@@ -36,11 +36,14 @@ DokanUnmount(
     PDokanVCB				vcb = Dcb->Vcb;
     ULONG					deviceNamePos;
 
+	DDbgPrint("==> DokanUnmount");
+
     eventLength = sizeof(EVENT_CONTEXT);
     eventContext = AllocateEventContextRaw(eventLength);
                 
     if (eventContext == NULL) {
         ;//STATUS_INSUFFICIENT_RESOURCES;
+		DDbgPrint(" Not able to allocate eventContext.");
         DokanEventRelease(vcb->DeviceObject);
         return;
     }
@@ -74,6 +77,8 @@ DokanUnmount(
     if (completedEvent) {
         ExFreePool(completedEvent);
     }
+
+	DDbgPrint("<== DokanUnmount");
 }
 
 
@@ -196,11 +201,9 @@ ReleaseTimeoutPendingIrp(
     while (!IsListEmpty(&completeList)) {
         listHead = RemoveHeadList(&completeList);
         irpEntry = CONTAINING_RECORD(listHead, IRP_ENTRY, ListEntry);
-        irp = irpEntry->Irp;
-        irp->IoStatus.Information = 0;
-        irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
-        DokanFreeIrpEntry(irpEntry);
-        IoCompleteRequest(irp, IO_NO_INCREMENT);
+		irp = irpEntry->Irp;
+		DokanCompleteIrpRequest(irp, STATUS_INSUFFICIENT_RESOURCES, 0);
+		DokanFreeIrpEntry(irpEntry);
     }
 
     DDbgPrint("<== ReleaseTimeoutPendingIRP");
@@ -349,7 +352,27 @@ Routine Description:
 
 VOID
 DokanStopCheckThread(
-    __in PDokanDCB	Dcb)
+__in PDokanDCB	Dcb)
+{
+	PIO_WORKITEM      workItem;
+
+	DDbgPrint("==> DokanStopCheckThread");
+
+	workItem = IoAllocateWorkItem(Dcb->DeviceObject);
+	if (workItem == NULL){
+		DDbgPrint("Can't create work item.");
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	IoQueueWorkItem(workItem, DokanStopCheckThreadInternal, DelayedWorkQueue, workItem);
+
+	DDbgPrint("<== DokanStopCheckThread");
+}
+
+VOID
+DokanStopCheckThreadInternal(
+	__in PDEVICE_OBJECT 	DeviceObject,
+	__in PVOID				Context)
 /*++
 
 Routine Description:
@@ -358,18 +381,23 @@ Routine Description:
 
 --*/
 {
-    DDbgPrint("==> DokanStopCheckThread");
-    
+	PDokanDCB Dcb;
+
+    DDbgPrint("==> DokanStopCheckThreadInternal");
+
+	Dcb = DeviceObject->DeviceExtension;
+
     KeSetEvent(&Dcb->KillEvent, 0, FALSE);
 
     if (Dcb->TimeoutThread) {
-        KeWaitForSingleObject(Dcb->TimeoutThread, Executive,
-            KernelMode, FALSE, NULL);
-        ObDereferenceObject(Dcb->TimeoutThread);
-        Dcb->TimeoutThread = NULL;
+        KeWaitForSingleObject(Dcb->TimeoutThread, Executive, KernelMode, FALSE, NULL);
+		if (Dcb->TimeoutThread){
+			ObDereferenceObject(Dcb->TimeoutThread);
+			Dcb->TimeoutThread = NULL;
+		}
     }
     
-    DDbgPrint("<== DokanStopCheckThread");
+    DDbgPrint("<== DokanStopCheckThreadInternal");
 }
 
 

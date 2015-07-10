@@ -295,8 +295,6 @@ DokanDispatchFileSystemControl(
 	PIO_STACK_LOCATION	irpSp;
 	PDokanVCB			vcb;
 
-	//PAGED_CODE();
-
 	__try {
 		FsRtlEnterFileSystem();
 
@@ -327,6 +325,7 @@ DokanDispatchFileSystemControl(
 				if (irpSp->Parameters.MountVolume.DeviceObject != vcb->Dcb->DeviceObject) {
 					DDbgPrint("   Not DokanDiskDevice");
 					status = STATUS_INVALID_PARAMETER;
+					break;
 				}
 				vpb = irpSp->Parameters.MountVolume.Vpb;
 				vpb->DeviceObject = vcb->DeviceObject;
@@ -357,11 +356,7 @@ DokanDispatchFileSystemControl(
 
 	} __finally {
 		
-		Irp->IoStatus.Status = status;
-		Irp->IoStatus.Information = 0;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-		DokanPrintNTStatus(status);
+		DokanCompleteIrpRequest(Irp, status, 0);
 		DDbgPrint("<== DokanFileSystemControl");
 
 		FsRtlExitFileSystem();

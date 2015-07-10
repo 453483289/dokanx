@@ -38,8 +38,6 @@ DokanDispatchQueryVolumeInformation(
 	PDokanCCB			ccb;
 	ULONG               info = 0;
 
-	//PAGED_CODE();
-
 	__try {
 
 		FsRtlEnterFileSystem();
@@ -166,12 +164,7 @@ DokanDispatchQueryVolumeInformation(
 
 	} __finally {
 
-		if (status != STATUS_PENDING) {
-			Irp->IoStatus.Status = status;
-			Irp->IoStatus.Information = info;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
-			DokanPrintNTStatus(status);
-		}
+	    DokanCompleteIrpRequest(Irp, status, info);
 
 		DDbgPrint("<== DokanQueryVolumeInformation");
 
@@ -236,12 +229,8 @@ DokanCompleteQueryVolumeInformation(
 		status = EventInfo->Status;
 	}
 
-
-	irp->IoStatus.Status = status;
-	irp->IoStatus.Information = info;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
-
-	DokanPrintNTStatus(status);
+	DokanCompleteIrpRequest(irp, status, info);
+	
 	DDbgPrint("<== DokanCompleteQueryVolumeInformation");
 
 	//FsRtlExitFileSystem();
@@ -257,15 +246,11 @@ DokanDispatchSetVolumeInformation(
 {
 	NTSTATUS status = STATUS_INVALID_PARAMETER;
 
-	//PAGED_CODE();
-
 	//FsRtlEnterFileSystem();
 
 	DDbgPrint("==> DokanSetVolumeInformation");
 
-	Irp->IoStatus.Status = status;
-	Irp->IoStatus.Information = 0;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	DokanCompleteIrpRequest(Irp, status, 0);
 
 	DDbgPrint("<== DokanSetVolumeInformation");
 

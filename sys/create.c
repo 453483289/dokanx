@@ -32,6 +32,8 @@ DokanAllocateFCB(
     )
 {
     PDokanFCB fcb = ExAllocatePool(sizeof(DokanFCB));
+	
+	DDbgPrint("==> Allocate FCB");
 
     if (fcb == NULL) {
         return NULL;
@@ -78,6 +80,8 @@ DokanAllocateFCB(
     InsertTailList(&Vcb->NextFCB, &fcb->NextFCB);
 
     InterlockedIncrement(&Vcb->FcbAllocated);
+
+	DDbgPrint("<== Allocate FCB");
 
     return fcb;
 }
@@ -166,6 +170,8 @@ DokanFreeFCB(
 
     ASSERT(Fcb != NULL);
 
+	DDbgPrint("==> DokanFreeFCB");
+
     vcb = Fcb->Vcb;
 
     KeEnterCriticalRegion();
@@ -203,6 +209,8 @@ DokanFreeFCB(
 
     ExReleaseResourceLite(&vcb->Resource);
     KeLeaveCriticalRegion();
+	
+	DDbgPrint("<== DokanFreeFCB");
 
     return STATUS_SUCCESS;
 }
@@ -349,7 +357,7 @@ Return Value:
     BOOLEAN				needBackSlashAfterRelatedFile = FALSE;
     HANDLE				accessTokenHandle;
 
-    PAGED_CODE();
+	PAGED_CODE();
 
     __try {
         FsRtlEnterFileSystem();
@@ -372,6 +380,7 @@ Return Value:
         vcb = DeviceObject->DeviceExtension;
         PrintIdType(vcb);
         if (GetIdentifierType(vcb) != VCB) {
+			DDbgPrint("  IdentifierType is not vcb");
             status = STATUS_SUCCESS;
             __leave;
         }
@@ -458,6 +467,7 @@ Return Value:
         // "+ sizeof(WCHAR)" is for the last NULL character
         fileName = ExAllocatePool(fileNameLength + sizeof(WCHAR));
         if (fileName == NULL) {
+			DDbgPrint("    Can't allocatePool for fileName");
             status = STATUS_INSUFFICIENT_RESOURCES;
             __leave;
         }
@@ -491,6 +501,7 @@ Return Value:
 
         fcb = DokanGetFCB(vcb, fileName, fileNameLength);
         if (fcb == NULL) {
+			DDbgPrint("    Was not able to get FCB for fileName %s", fileName);
             status = STATUS_INSUFFICIENT_RESOURCES;
             __leave;
         }
@@ -502,6 +513,7 @@ Return Value:
 
         ccb = DokanAllocateCCB(dcb, fcb);
         if (ccb == NULL) {
+			DDbgPrint("    Was not able to allocate CCB");
             DokanFreeFCB(fcb); // FileName is freed here
             status = STATUS_INSUFFICIENT_RESOURCES;
             __leave;
@@ -526,6 +538,7 @@ Return Value:
         eventContext = AllocateEventContext(vcb->Dcb, Irp, eventLength, ccb);
                 
         if (eventContext == NULL) {
+			DDbgPrint("    Was not able to allocate eventContext");
             status = STATUS_INSUFFICIENT_RESOURCES;
             __leave;
         }
@@ -547,14 +560,10 @@ Return Value:
 
     } __finally {
 
-        if (status != STATUS_PENDING) {
-            Irp->IoStatus.Status = status;
-            Irp->IoStatus.Information = info;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            DokanPrintNTStatus(status);
-        }
-
+        DokanCompleteIrpRequest(Irp, status, info);
+        
         DDbgPrint("<== DokanCreate");
+
         FsRtlExitFileSystem();
     }
 
@@ -655,10 +664,7 @@ DokanCompleteCreate(
         DokanFreeFCB(fcb);
     }
     
-    irp->IoStatus.Status = status;
-    irp->IoStatus.Information = info;
-    IoCompleteRequest(irp, IO_NO_INCREMENT);
+	DokanCompleteIrpRequest(irp, status, info);
 
-    DokanPrintNTStatus(status);
     DDbgPrint("<== DokanCompleteCreate");
 }

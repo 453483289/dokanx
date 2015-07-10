@@ -38,8 +38,6 @@ DokanDispatchLock(
 	PEVENT_CONTEXT		eventContext;
 	ULONG				eventLength;
 
-	//PAGED_CODE();
-
 	__try {
 		FsRtlEnterFileSystem();
 
@@ -117,15 +115,7 @@ DokanDispatchLock(
 
 	} __finally {
 
-		if (status != STATUS_PENDING) {
-			//
-			// complete the Irp
-			//
-			Irp->IoStatus.Status = status;
-			Irp->IoStatus.Information = 0;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
-			DokanPrintNTStatus(status);
-		}
+		DokanCompleteIrpRequest(Irp, status, 0);
 
 		DDbgPrint("<== DokanLock");
 		FsRtlExitFileSystem();
@@ -162,11 +152,8 @@ DokanCompleteLock(
 	// DDbgPrint("   set Context %X\n", (ULONG)ccb->UserContext);
 
 	status = EventInfo->Status;
-	irp->IoStatus.Status = status;
-	irp->IoStatus.Information = 0;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
-	DokanPrintNTStatus(status);
+	DokanCompleteIrpRequest(irp, status, 0);
 
 	DDbgPrint("<== DokanCompleteLock");
 

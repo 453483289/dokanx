@@ -101,7 +101,9 @@ DokanReleaseForCreateSection(
 
     header = FileObject->FsContext;
     if (header && header->Resource) {
+		KeEnterCriticalRegion();
         ExReleaseResourceLite(header->Resource);
+		KeLeaveCriticalRegion();
     }
 
     DDbgPrint("DokanReleaseForCreateSection");
@@ -160,6 +162,8 @@ Return Value:
     UNICODE_STRING		functionName;
     FS_FILTER_CALLBACKS filterCallbacks;
     PDOKAN_GLOBAL		dokanGlobal = NULL;
+
+	PAGED_CODE();
 
     DDbgPrint("==> DriverEntry ver.%x, %s %s\n", DOKAN_DRIVER_VERSION, __DATE__, __TIME__);
 
@@ -308,9 +312,7 @@ DokanDispatchShutdown(
     PAGED_CODE();
     DDbgPrint("==> DokanShutdown");
 
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = 0;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	DokanCompleteIrpRequest(Irp, STATUS_SUCCESS, 0);
 
     DDbgPrint("<== DokanShutdown");
     return STATUS_SUCCESS;
@@ -359,9 +361,8 @@ DokanDispatchPnp(
             //status = IoCallDriver(Vcb->TargetDeviceObject, Irp);
         }
     } __finally {
-        Irp->IoStatus.Status = status;
-        Irp->IoStatus.Information = 0;
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+		DokanCompleteIrpRequest(Irp, status, 0);
 
         DDbgPrint("<== DokanPnp");
     }
@@ -435,8 +436,36 @@ DokanPrintNTStatus(
     PrintStatus(Status, STATUS_INVALID_PARAMETER);
     PrintStatus(Status, STATUS_INVALID_USER_BUFFER);
     PrintStatus(Status, STATUS_INVALID_HANDLE);
+	PrintStatus(Status, STATUS_INSUFFICIENT_RESOURCES);
+	PrintStatus(Status, STATUS_DEVICE_DOES_NOT_EXIST);
 }
 
+VOID 
+DokanCompleteIrpRequest(
+__in PIRP Irp,
+__in NTSTATUS Status,
+__in ULONG_PTR Info
+){
+
+	if (Irp == NULL){
+		DDbgPrint("  Irp is NULL, so no complete required");
+		return;
+	}
+
+	if (Status == -1){
+		DDbgPrint("  Status is -1 which is not valid NTSTATUS");
+		Status = STATUS_INVALID_PARAMETER;
+	}
+
+	if (Status != STATUS_PENDING)
+	{
+		Irp->IoStatus.Status = Status;
+		Irp->IoStatus.Information = Info;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	}
+
+	DokanPrintNTStatus(Status);
+}
 
 
 VOID
