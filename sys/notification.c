@@ -446,7 +446,7 @@ __in PDokanDCB	Dcb)
 	workItem = IoAllocateWorkItem(Dcb->DeviceObject);
 	if (workItem == NULL){
 		DDbgPrint("Can't create work item.");
-		return STATUS_INVALID_PARAMETER;
+		return;
 	}
 
 	IoQueueWorkItem(workItem, DokanStopEventNotificationThreadInternal, DelayedWorkQueue, workItem);
