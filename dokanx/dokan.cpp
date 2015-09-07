@@ -324,7 +324,12 @@ UINT WINAPI DokanLoop(PVOID pInstance)
 		if (!fOk)
 		{
 			DWORD dwLastError = GetLastError();
-			logw(L"Ioctl failed with code (%d). rawDeviceName is <%s>", dwLastError, szRawDeviceName);
+            logw(L"Ioctl failed for wait with code (%d). rawDeviceName is <%s>", dwLastError, szRawDeviceName);
+            if (dwLastError == ERROR_NO_SYSTEM_RESOURCES) {
+                logw(L"Processing will continue. rawDeviceName is <%s>", dwLastError, szRawDeviceName);
+                continue;
+            }
+			
 			result = dwLastError;
 			break;
 		}

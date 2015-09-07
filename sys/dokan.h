@@ -68,7 +68,7 @@ extern ULONG g_Debug;
 #define DRIVER_CONTEXT_EVENT		2
 #define DRIVER_CONTEXT_IRP_ENTRY	3
 
-#define DOKAN_IRP_PENDING_TIMEOUT	(1000 * 15) // in millisecond
+#define DOKAN_IRP_PENDING_TIMEOUT	(1000 * 25) // in millisecond
 #define DOKAN_IRP_PENDING_TIMEOUT_RESET_MAX (1000 * 60 * 5) // in millisecond
 #define DOKAN_CHECK_INTERVAL		(1000 * 5) // in millisecond
 
